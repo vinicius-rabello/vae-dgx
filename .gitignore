@@ -1,0 +1,4 @@
+data/raw
+*/.ipynb_checkpoints
+models/*epoch*
+__pycache__
