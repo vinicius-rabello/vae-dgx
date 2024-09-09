@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-
+# Initialize some constants
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 INPUT_DIM = 256
 INIT_DIM = 8
@@ -31,20 +31,22 @@ dataset = datasets.ImageFolder(root=data_path, transform=transform) # read data 
 
 train_loader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True) # create dataloader object
 
-model = VariationalAutoEncoder(init_dim=INIT_DIM, latent_dim=LATENT_DIM, kernel_size=KERNEL_SIZE).to(DEVICE) # initializing model object
-# model = VariationalAutoEncoder(init_dim=INIT_DIM, latent_dim=LATENT_DIM, kernel_size=KERNEL_SIZE)
-# model.load_state_dict(torch.load('models/general_model_epoch_600'))
-# model.eval()
+# model = VariationalAutoEncoder(init_dim=INIT_DIM, latent_dim=LATENT_DIM, kernel_size=KERNEL_SIZE).to(DEVICE) # initializing model object
+model = VariationalAutoEncoder(init_dim=INIT_DIM, latent_dim=LATENT_DIM, kernel_size=KERNEL_SIZE)
+model.load_state_dict(torch.load('models/general_model_epoch_550'))
+model = model.to(DEVICE)
+model.eval()
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LR_RATE) # defining optimizer
 loss_fn = nn.BCELoss(reduction='sum') # define loss function
 
 # Start Training
+avg_losses = torch.tensor(data=[]).to(DEVICE)
 for epoch in range(1, NUM_EPOCHS + 1):
     loop = tqdm(enumerate(train_loader))
     print(f'Epoch: {epoch}')
-    losses = []
-    avg_losses = []
+    losses = torch.tensor(data=[])
+    losses = losses.to(DEVICE)
     for i, (x, _) in loop:
         # forward pass
         x = x.to(DEVICE).view(1, INPUT_DIM, INPUT_DIM)
@@ -56,25 +58,29 @@ for epoch in range(1, NUM_EPOCHS + 1):
         
         # backpropagation
         loss = reconstruction_loss + kl_div
-        losses.append(loss.detach().numpy())
+        #losses.append(loss.detach().cpu().numpy())
+        loss = loss.view((1)).to(DEVICE)
+        losses = torch.cat((losses, loss), -1)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         loop.set_postfix(loss=loss.item())
 
-    avg_loss = np.mean(losses)
-    avg_losses.append(avg_loss)
+    avg_loss = losses.mean().view((1)).to(DEVICE)
+    avg_losses = torch.cat((avg_losses,avg_loss), -1)
+    # avg_losses.append(avg_loss)
     print(f'Loss: {avg_loss}')
 
     # display images
-    x = x[0].numpy()
-    x_reconstructed = x_reconstructed[0].detach().numpy()
-    fig, (ax1, ax2) = plt.subplots(1,2)
-    ax1.imshow(x, cmap='gray')
-    ax2.imshow(x_reconstructed, cmap='gray')
-    plt.show()
+    # x = x[0].cpu().numpy()
+    # x_reconstructed = x_reconstructed[0].detach().cpu().numpy()
+    # fig, (ax1, ax2) = plt.subplots(1,2)
+    # ax1.imshow(x, cmap='gray')
+    # ax2.imshow(x_reconstructed, cmap='gray')
+    # plt.show()
     
     if epoch % 50 == 0:
-        torch.save(model.state_dict(), f'models/general_model_epoch_{epoch}')
+        torch.save(model.state_dict(), f'models/general_model_epoch_{550 + epoch}')
+        torch.save(losses, 'models/avg_losses.pt')
 
 torch.save(model.state_dict(), 'models/general_model_final')
